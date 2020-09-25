@@ -1,0 +1,16 @@
+@startuml
+
+participant binder.c as b
+participant misc.c as m
+participant list.h as l
+[-> b: device_initcall(\nbinder_init)
+activate b
+
+b -> b : init_binder_device
+activate b
+b -> b : miscdev init
+b -> m : misc_register
+b -> l: hlit_add_head
+deactivate b
+deactivate b
+@enduml

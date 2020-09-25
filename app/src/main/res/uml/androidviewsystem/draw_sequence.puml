@@ -1,0 +1,206 @@
+@startuml
+title
+<font color=red size=16>图形绘制流程图</font>
+
+endtitle
+
+header
+<font color=red>Warning:</font>
+Do not use for commercial purposes.
+endheader
+skinparam backgroundcolor Beige
+'-----------------------------------------------------------
+'box "client process"
+participant Activity as A
+participant ViewRootImpl as VRI
+participant Surface as Su
+participant android_view_Surface as avS
+participant Surface.cpp as Suc
+'end box
+box "SurfaceFlinger Process"
+participant MonitoredProducer as MP
+participant BufferQueueProducer as BQP
+participant BufferQueueLayer as BQL
+participant SurfaceFlinger as SF
+participant MessageQueue as MQ
+end box
+
+A --> VRI : makeVisibal
+note over A
+通过setVisibility可以发起请求
+监听下一个vsync信号,当vsync信号
+来临之后最终会触发performDraw()
+end note
+hnote over VRI
+VSync
+end note
+VRI -> VRI : performDraw
+activate VRI
+VRI -> VRI : draw
+activate VRI
+VRI -> VRI : drawSoftware
+activate VRI
+VRI -> Su : lockCanvas
+note over VRI
+Surface的创建可以参考Window初始化
+end note
+activate Su
+Su -> avS : nativeLockCanvas
+activate avS
+avS -> Suc : lock(//<color green>&outBuffer//)
+note over avS
+lock surface相当于分配一块内存
+然后把这块内存作为bitmap绑定给canvas
+这样针对canvas的绘制操作实际上就相当于
+给这块内存写数据
+end note
+activate Suc
+Suc -> Suc : connect(//API_CPU//)
+activate Suc
+Suc -> MP : connect(//<color green>&outPut//)
+note over Suc: QueueBufferOutput output
+activate MP
+MP -> BQP : connect(//<color green>&outPut//)
+deactivate MP
+BQP --> Suc : //<color green>&outPut//
+deactivate Suc
+Suc -> Suc : dequeueBuffer(//<color green>&buffer//)
+activate Suc
+Suc -> MP : dequeueBuffer(//<color green>&out//)
+activate MP
+MP -> BQP : dequeueBuffer(//<color green>&outSlot//)
+deactivate MP
+activate BQP
+BQP -> BQP : waitForFreeSlotTheRelock(\n//<color green>&found//)
+note over BQP
+这里会检查buffer slot, 获取mFreeBuffers
+或者mFreeSlots,优先前者.
+Producer are not allowed to dequeue more
+ than mMaxDequeuedBufferCount buffers.
+mMaxDequeuedBufferCount默认为1,Producer
+可以修改
+如果没有合适的buffer,则会等待,可以设置等待超时
+时间,如果未设置,默认一直等待
+end note
+BQP -> BQP : mActiveBuffers.insert()
+BQP -> BQP : //<color green>&outSlot// = //<color green>&found//
+BQP -> BQP : mSlot[//<color green>&outSlot//]
+note over BQP : 完成outSlot对应的mSlot配置，如果\n需要重新分配buffer，则新建\nGraphicBuffer
+BQP -> BQP : new GraphicBuffer
+BQP --> Suc : //<color green>&outSlot// (即 //<color green>&out//)
+deactivate BQP
+note over Suc
+可以看到这里获取的其实是对应buffer
+slot的数组index, 使用index可以使
+得buffer通信过程中双方共享buffer,
+而无需传递数据
+end note
+Suc -> Suc : gbuf
+note over Suc
+GraphicBuffer gbuf(mSlots[outSlot].buffer)
+把返回的index对应的buffer引用传给gbuf
+end note
+Suc -> Suc : //<color green>&buffer//=gbuf.get()
+note over Suc
+把GraphicBuffer类型转换为
+ANativeWindowBuffer类型
+end note
+deactivate Suc
+Suc -> Suc : //<color green>&outBuffer//==//<color green>&buffer//
+Suc --> avS : //<color green>&outBuffer//
+deactivate Suc
+avS -> avS : bitmap
+note over avS
+根据outbuffer信息构建一个SkBitmap
+可以看出Bitmap实际上就是一个buffer
+相当于一个容器
+end note
+avS -> avS : getNativeCanvas(\n//<color green>canvasObj//)
+note over avS : canvasObj指向mNativeCanvasWrapper,\n是由Canvas构造函数初始化的
+avS -> avS : setBitmap(bitmap)
+note over avS
+把bitmap绑定给Canvas,这样就可
+以给bitmap上绘制东西了.
+  bitmap是容器
+  Canvas是执行绘图命令的宿主
+  Paint则是绘制的方式
+  Rect/Path/text/Bitmap 要绘制的元素
+end note
+avS --> Su : //<color green>canvasObj//
+avS --> Su : (jlong)\nlockedSurface.get
+deactivate avS
+note over Su : This Ref is used to unlock canvas
+Su --> VRI : <return Canvas>
+deactivate Su
+VRI -> VRI : mView.draw(canvas)
+note over VRI
+各种绘制都会通过SkCanvas完成,
+位于external/skia/
+end note
+VRI -> Su : unlockCanvasAndPost
+deactivate VRI
+deactivate VRI
+deactivate VRI
+activate Su
+Su -> Su : unlockSwCanvasAndPost
+Su -> avS : nativeUnlockCanvasAndPost
+deactivate Su
+activate avS
+avS -> avS : setBitmap(SkBitmap())
+note over avS : detach the canvas from the surface
+avS -> Suc : unlockAndPost
+deactivate avS
+activate Suc
+Suc -> Suc : queueBuffer(\n//<color green>&outBuffer.get()//)
+activate Suc
+Suc -> Suc : getSlotFromBufferLocked(\n//<color green>&buffer//)
+Suc -> MP : queueBuffer(//<color green>slot//)
+deactivate Suc
+deactivate Suc
+activate MP
+MP -> BQP : queueBuffer(//<color green>slot//)
+deactivate MP
+activate BQP
+BQP -> BQP : BufferItem //<color green>item//
+note over BQP: 根据现有信息构建item
+BQP -> BQP : mQueue.push_back(//<color green>item//)
+BQP -> BQL : onFrameAvailable(//<color green>item//)
+note over BQP, BQL : 回调注册过程参看Surface创建流程
+deactivate BQP
+activate BQL
+BQL -> SF : signalLayerUpdate
+deactivate BQL
+activate SF
+SF -> MQ : invalidate
+deactivate SF
+activate MQ
+MQ -> MQ : EventThreadConnection->\nrequestNextVsync
+MQ --> VRI
+deactivate MQ
+note over VRI
+到这里表示上一个Surface信息已经
+成功交给SurfaceFlinger,至于SF
+怎么处理已经不是View关心的了,所以
+可以开始请求和处理下一个VSync信号了
+end note
+hnote over VRI
+request Next VSync
+end note
+note over SF
+当下一个Vsync来临的时候会通知到SF,
+具体流程可以参看SF初始化流程图
+end note
+hnote over VRI,SF
+VSync
+end note
+VRI -> VRI : performDraw
+SF -> SF : onMessageReceived
+activate SF
+
+
+'-----------------------------------------------------------
+legend left
+以software绘制为例
+end legend
+right footer Generated by Yaoguang
+@enduml

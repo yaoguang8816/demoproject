@@ -1,0 +1,286 @@
+@startuml
+title
+<font color=red size=16>Window和Surface创建流程图</font>
+
+endtitle
+
+header
+<font color=red>Warning:</font>
+Do not use for commercial purposes.
+endheader
+'-----------------------------------------------------------
+'box "client process"
+participant Activity as A
+participant WindowManagerGlobal as WMG
+participant ViewRootImpl as VRI
+participant Surface as Su
+'end box
+'box "system_server process"
+participant Session as S
+participant WindowManagerService as WMS
+participant WindowState as WS
+participant SurfaceSession as SS
+participant WindowSurfaceController as WSC
+'end box
+participant SurfaceControl_Builder as SCB
+participant SurfaceControl as SC
+participant "android_view_\nSurface" as avS
+participant "android_view_\nSurfaceSession" as avSS
+participant "android_view_\nSurfaceControl" as avSC
+participant SurfaceControl.cpp as SCc
+participant Surface.cpp as Suc
+participant SurfaceComposerClient as SCC
+box "system_server process"
+participant Client as C
+participant SurfaceFlinger as SF
+participant BufferQueueLayer as BQL
+participant BufferQueue as BQ
+participant MonitoredProducer as MP
+participant BufferLayerConsumer as BLC
+participant ConsumerBase as CB
+end box
+'############### WMS通道的创建 ##############
+A -> A : makeVisiable
+activate A
+A --> WMG : addView
+deactivate A
+activate WMG
+WMG -> VRI : <<create ViewRootImpl>>
+activate VRI
+VRI -> WMG : mWindwoSession=\ngetWindowSession()
+activate WMG
+WMG -> WMS : openSession
+activate WMS
+WMS -> S : <new Session>
+WMS --> WMG : <return Session>
+deactivate WMS
+WMG -> VRI : <return mWindwoSession>
+deactivate WMG
+note over VRI
+other init:
+    mFirst=true
+    mAttachInfo
+    mChoreographer
+end note
+VRI --> WMG
+deactivate VRI
+WMG -> VRI : setView
+deactivate WMG
+activate VRI
+VRI -> S : addToDisplay
+deactivate VRI
+activate S
+S -> WMS : addWindow
+deactivate S
+activate WMS
+WMS -> WS : attach
+deactivate WMS
+activate WS
+WS -> S : windowAddedLocked
+deactivate WS
+activate S
+'##############SurfaceSession的创建和Client的通道建立###############
+S -> SS : new SurfaceSession
+activate SS
+SS -> avSS : nativeCreate
+deactivate SS
+activate avSS
+avSS -> SCC : new SurfaceComposerClient
+avSS -> SCC : onFirstRef
+deactivate avSS
+activate SCC
+SCC --> SF : createConnection
+note over SCC
+Binder调用,通过ComposerService调用到
+SurfaceFlinger,参考SurfaceFlinger类图
+end note
+activate SF
+SF -> C : new Client
+SF -> SCC : return ISurfaceComposerClient
+deactivate SCC
+note over SCC
+到这里完成了SurfaceComposerClient
+到Client的连接建立
+end note
+deactivate SF
+S -> WMS : mSessions.add(this)
+deactivate S
+
+'#######SurfaceControl和Surface的创建#######
+==Surface 创建过程==
+[o-> VRI : vsync 触发绘制流程
+activate VRI
+VRI -> VRI : performTraversals
+activate VRI
+VRI -> VRI : //<color red>mFirst=true//\nrelayoutWindow
+activate VRI
+VRI -> S : relayout
+activate S
+S -> WMS : //<color red>surfaceControl//\nrelayoutWindow
+deactivate S
+activate WMS
+WMS -> WMS : createSurfaceControl
+WMS -> WSC : createSurfaceLocked
+activate WSC
+WSC -> SCB : build
+activate SCB
+SCB -> SC : new SurfaceControl
+activate SC
+SC -> avSC : nativeCreate
+activate avSC
+avSC -> SCC : createSurfaceChecked(\n//<color blue>&surface//)
+activate SCC
+SCC -> C : createSurface(\n//<color blue>&handle,&gbp//)
+note over SCC
+handle为IBinder类型
+gpb为IGraphicBufferProducer类型
+end note
+activate C
+C -> SF : createLayer
+deactivate C
+activate SF
+SF -> SF : createBufferQueueLayer
+activate SF
+note over SF
+这里会根据传进来的flag选择创建不同的Layer
+包括BufferQueue,BufferState,Color,Container
+end note
+SF -> BQL : new BufferQueueLayer
+note over SF,BQL
+从这里可以看出,每一个Surface都会创建一个Layer,
+每一个Layer都会创建一个BufferQueue,并生成相应的
+生产者消费者引用,也就是说Surface与BufferQueue是
+一一对应的
+end note
+BQL -> BQL : onFirstRef
+activate BQL
+BQL -> BQ : createBufferQueue(\n//<color green>&producer,&consumer//)
+activate BQ
+BQ -> BQ : core=new BufferQueueCore
+BQ -> BQ : //<color green>producer//=\nnew BufferQueueProducer(core)
+BQ -> BQ : //<color green>consumer//=\nnew BufferLayerConsumer(core)
+BQ --> BQL : //<color green>producer,consumer//
+note over BQ
+producer和consumer共同依赖于同一个core,
+core相当于它们之间的一座桥梁
+end note
+deactivate BQ
+note over BQL
+根据创建的producer和consumer
+来初始化mProducer和mConsumer
+end note
+BQL -> MP: mProducer=\nnew MonitoredProducer(//<color green>producer//)
+BQL -> BLC: mConsumer=\nnew BufferLayerConsumer(//<color green>consumer//)
+activate BLC
+BLC -> CB : new ConsumerBase
+deactivate BLC
+activate CB
+CB -> CB : mConsumer=consumer
+CB -> CB : proxy=new ProxyConsumerListener(this)
+CB -> CB : mConsumer->consumerConnect(proxy)
+note over CB
+把ConsumerListener(ConsumerBase实现了该接口，所以this)
+注册给ProxyConsumerListener
+并把ProxyConsumerListener引用通过BufferQueueConsumer
+传递给BufferQueueCore,因为BufferQueueProducer和
+BufferQueueConsumer共享BufferQueueCore引用，所以当
+BufferQueueProducer接收到生产者信息之后就可以通过mCore
+回调到BufferQueueConsumer，比如queueBuffer的时候回调
+onFrameAvailable(),就会回调到ConsumerBase的
+onFrameAvailable()
+end note
+deactivate CB
+note over BQL
+把BufferQueueLayer注册给ConsumerBase,
+这样最终回调就会回调到BufferQueueLayer
+的onFrameAvailable()
+end note
+BQL -> BLC: setContentsChangedListener(this)
+activate BLC
+BLC -> CB : setFrameAvailableListener
+deactivate BLC
+BQL -> SF
+deactivate BQL
+SF -> BQL : gbp=layer->getProducer
+BQL --> SF : MonitoredProducer
+SF --> SCC : //<color blue>gbp//: MonitoredProducer
+deactivate SF
+deactivate SF
+SCC -> SCc : //<color blue>surface//=new \nSurfaceControl(//<color blue>gbp//)
+activate SCc
+SCc -> SCc : //<color blue>mGraphicBufferProducer//=\ngbp
+deactivate SCc
+SCC --> avSC : //<color blue>surface//
+deactivate SCC
+avSC --> SC : reinterpret_cast<jlong>(surface.get())
+deactivate avSC
+note over SC
+这里把surface对象指针地址
+强制转换为long型然后返回并
+赋值给//<color red>mNativeObject//
+end note
+SC --> SCB
+deactivate SC
+deactivate BQL
+
+
+SCB --> WSC :mSurfaceControl
+deactivate SCB
+WSC --> WMS : <return WindowSurfaceController>
+deactivate WSC
+deactivate WSC
+WMS -> WMS : <makeSurfaceControl>
+WMS -> S : //<color red>surfaceControl//
+deactivate WMS
+S --> VRI: //<color red>surfaceControl//
+VRI -> Su : mSurface.copyFrom(\nmSurfaceControl)
+activate Su
+Su -> avS : nativeGetFromSurfaceControl
+activate avS
+note over avS
+这里携带了前面创建的SurfaceControl
+的native端的指针值//<color red>other.mNativeObject//
+end note
+avS -> SCc : getSurface
+activate SCc
+SCc -> SCc : generateSurfaceLocked
+SCc -> Suc : new Surface(\n//<color blue>mGraphicBufferProducer//)
+note over Suc
+创建native Surface, 并使得持有
+mGraphicBufferProducer引用
+end note
+deactivate SCc
+Suc --> avS: mSurfaceData
+avS --> Su : reinterpret_cast<jlong>(surface.get())
+deactivate avS
+Su -> Su : setNativeObjectLocked
+activate Su
+Su -> Su : //<color red>mNativeObject//
+deactivate Su
+Su --> VRI
+deactivate Su
+note over VRI
+这样就完成了Surface的创建
+构建了整个Surface与SurfaceFlinger通信通道
+连接了BufferQueue生产者消费者以及相关回调
+end note
+
+deactivate VRI
+deactivate VRI
+deactivate VRI
+'-----------------------------------------------------------
+legend left
+总结一：图示内容
+1. 描述了activity创建过程中与WMS的连接建立过程
+2. 描述了SurfaceSession的创建和SurfaceComposerClient与Client的建立过程
+3. 描述了第一次performTraversals的时候relayoutWindow中创建SurfaceControl的过程
+4. 描述了BufferQueue的消费者和生产者建立过程
+5. 描述了根据SurfaceControl创建Surface的过程
+总结二：
+1. 通过第一次的创建，该Window对应的ViewRootImpl完成了其SurfaceControl、Surface的初始化，完成了与WMS的通信通道创建
+2. 完成了当前Surface对应的BufferQueue的通道
+其它：
+1. 虚箭头表示返回,函数结束或者间接调用(即中间省略部分无关紧要类)
+end legend
+right footer Generated by Yaoguang
+@enduml

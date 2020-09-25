@@ -1,0 +1,100 @@
+@startuml
+
+title
+<font color=red size=16>window类图</font>
+
+endtitle
+
+header
+<font color=red>Warning:</font>
+Do not use for commercial purposes.
+endheader
+'-----------------------------------------------------------
+package IWindowManager {
+    class IWindowManager.Stub
+    class IWindowManager.Proxy
+}
+class WindowState {
+    IWindow mClient
+    WindowToken mToken
+    AppWindowToken mAppToken
+}
+WindowState -> IWindow.Proxy : client
+WindowState .. W : Binder通信
+WindowState --> WindowToken
+WindowState --> AppWindowToken
+class WindowManagerService {
+    WindowHashMap mWindowMap
+    int addWindow()
+}
+WindowManagerService -up-|> IWindowManager.Stub:service
+WindowManagerService o-- WindowState
+
+'#############################
+package IWindowSession {
+    class IWindowSession.Stub
+    class IWindowSession.Proxy
+}
+class Session {
+    WindowManagerService mService
+    int addToDisplay()
+}
+Session -up-|> IWindowSession.Stub : service
+Session -left-> WindowManagerService
+'#############################
+class WindowContainer<E extends WindowContainer> {
+    WindowList<E> mChildren //是ArrayList
+}
+class WindowToken {
+}
+class AppWindowToken {
+}
+WindowToken -up-|> WindowContainer
+AppWindowToken -up-|> WindowToken
+'#############################
+class WindowManagerGlobal {
+    IWindowSession sWindowSession
+    IWindowSession getWindowSession()
+}
+WindowManagerGlobal .left. Session :Binder通信
+WindowManagerGlobal -> IWindowSession.Proxy : client
+
+class PhoneWindow {
+    IWindowManager sWindowManager = \n  IWindowManager.Stub.asInterface()
+}
+PhoneWindow -up-> IWindowManager.Proxy:client
+PhoneWindow .right. WindowManagerService :Binder通信
+'#############################
+class ViewRootImpl {
+    IWindowSession mWindowSession
+}
+ViewRootImpl -up-> WindowManagerGlobal
+ViewRootImpl .up. Session : Binder通信
+
+package IWindow {
+    class IWindow.Stub
+    class IWindow.Proxy
+}
+class W {
+}
+ViewRootImpl o-- W
+W --|> IWindow.Stub : service
+
+legend left
+总结一：
+1. Session: 客户端与WMS的会话，一般一个进程只拥有一个针对WMS的会话
+2. WindowState： 用来描述WindowManager管理中的一个Window
+3. WindowToken:
+4. DisplayContent:
+5. WindowContainer: 记录所有的token，WMS在addWindow的时候会把token添加到WindowContainer的mChildren中
+总结二：
+客户端与server端通信有三个Binder途径
+1. 客户端通过ServiceManager去获取IWindowManager并访问WMS
+2. 客户端通过IWindowManager获取IWindowSession，然后通过IWindowSession访问WMS
+3. WMS作为客户端通过IWindow访问W
+总结三：
+1. W对象是在ViewRootImpl构造的时候创建,一个ViewRootImpl对应一个W，在添加到WMS的时候只能添加一次,会保存在WMS的hashmap mWindowMap中，与WindowState一一对应。
+2.
+endlegend
+
+@enduml

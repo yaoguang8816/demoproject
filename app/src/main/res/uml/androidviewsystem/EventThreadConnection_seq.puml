@@ -1,0 +1,163 @@
+@startuml
+title
+<font color=red size=16>Choreographer流程图</font>
+
+endtitle
+
+header
+<font color=red>Warning:</font>
+Do not use for commercial purposes.
+endheader
+skinparam backgroundcolor Beige
+
+participant ViewRootImpl as VRI
+participant Choreographer as Ch
+participant DisplayEventReceiver.java as DER
+participant android_view_DisplayEventReceiver.cpp as avD
+participant DisplayEventDispatcher.cpp as DED
+participant DisplayEventReceiver.cpp as DERc
+participant EventThreadConnection as ETC
+participant SurfaceFlinger as SF
+participant Scheduler as Sc
+participant EventThread as ET
+participant DispSyncSource as DSS
+participant DispSync as DS
+participant DispSyncThread as DST
+
+===EventThread初始化==
+SF -> SF : init
+activate SF
+SF -> Sc : <createScheduler>
+activate Sc
+Sc -> DS : mPrimaryDispSync=\n<create DispSync("SchedulerDispSync")>
+activate DS
+DS -> DST : <create DispSyncThread>
+activate DST
+DST --> DS
+deactivate DST
+DS --> Sc
+deactivate DS
+Sc -> DS : init
+activate DS
+DS -> DST : run
+DS --> Sc
+deactivate DS
+Sc --> SF
+deactivate Sc
+create control threadLoop
+DST -> threadLoop : <<start loop>>
+activate threadLoop
+threadLoop -> threadLoop : mCond.wait
+note over threadLoop
+循环等待VSync信号，然后回调给注册监听者，
+使用者可以调用addEventListener注册监听
+end note
+
+SF -> Sc : createConnection(//<color green>app//)
+activate Sc
+Sc -> Sc : makeEventThread(\n//<color green>app, mPrimaryDispSync//)
+activate Sc
+Sc -> DSS : <create DispSyncSource>
+Sc -> ET : <create EventThread>
+activate ET
+'初始化EventThread，循环处理信号请求和信号上报
+ET -> ET : mVSyncSource:DispSyncSource
+ET -> ET : mThreadName://<color green>app//
+ET -> DSS : setCallback(this)
+activate DSS
+DSS -> DSS : mCallback:EventThread
+note over DSS
+EventThread继承了VSyncSource::CallBack
+所以此处回调为EventThread::onVSyncEvent
+end note
+DSS --> ET
+deactivate DSS
+create control threadMain
+ET -> threadMain : threadMain
+ET --> Sc
+deactivate ET
+deactivate Sc
+Sc --> SF
+deactivate Sc
+deactivate SF
+activate threadMain
+threadMain -> threadMain : mCondition.wait
+note over threadMain
+1. 注册监听VSync
+2. 分发VSync消息
+end note
+
+===EventThreadConnection初始化==
+'Choreographer初始化
+VRI -> Ch : getInstence
+activate Ch
+Ch -> Ch : ThreadLocal sThreadInstance
+note over Ch
+这里Choreographer的初始化是ThreadLocal
+方式的，每一个Thread都会拥有一个
+Choreographer对象引用，但是又是
+单例模式，所以每个Thread只能拥有一个引用
+end note
+Ch -> Ch : Choreographer(\nVSYNC_SOURCE_APP)
+activate Ch
+note over Ch
+VSYNC_SOURCE_APP是Vsync source，
+参考ISurfaceComposer.h
+目前有两种，分别是app和sf
+end note
+Ch --> DER : new FrameDisplayEventReceiver(\nvsyncSource)
+deactivate Ch
+deactivate Ch
+activate DER
+DER -> avD : nativeInit
+activate avD
+avD -> avD : new NativeDisplayEventReceiver
+activate avD
+avD -> DED : DisplayEventDispatcher
+deactivate avD
+activate DED
+DED -> DERc : mReceiver(vsyncSource)
+deactivate DED
+activate DERc
+DERc -> SF : sf=ComposerService.getService
+DERc -> SF : createDisplayEventConnection(\nvsyncSource)
+deactivate DERc
+activate SF
+SF -> SF: handle
+note over SF
+这里根据vsyncSource取得对应的EventThread句柄
+end note
+SF -> Sc : createDisplayEventConnection
+deactivate SF
+activate Sc
+Sc -> ET: createEventConnection
+deactivate Sc
+activate ET
+ET -> ETC : <create>
+deactivate ET
+activate ETC
+ETC -> ETC : mEventThread:EventThread
+note over ETC
+完成创建连接到EventThread的Connection
+end note
+ETC --> avD
+avD --> DED : initialize
+deactivate ETC
+'初始化DisplayEventDispatcher，创建监听VSync信号的looper
+activate DED
+DED -> DERc : getFd
+activate DERc
+DERc -> DERc : mDataChannel->getFd
+DERc --> DED : Fd
+deactivate DERc
+DED -> DED : mLooper->addFd(fd)
+note over DED
+通过Looper监听mDataChannel对应的Fd
+end note
+DED --> avD
+deactivate DED
+avD --> DER: mReceiverPtr
+deactivate avD
+deactivate DER
+
+@enduml

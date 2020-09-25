@@ -1,0 +1,26 @@
+@startuml
+title
+<font color=red size=16>native Binder</font>
+
+end title
+
+header
+<font color=red>Warning:</font>
+Do not use for commercial purposes.
+end header
+'-------------------------------------------------
+
+class IBinder {
+}
+
+class BBinder{
+    localBinder()
+}
+
+class BpBinder{
+    remoteBinder()
+}
+BpBinder -up-|> IBinder
+BBinder -up-|> IBinder
+
+@enduml

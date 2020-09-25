@@ -1,0 +1,256 @@
+@startuml
+title
+<font color=red size=16>Choreographer流程图</font>
+
+endtitle
+
+header
+<font color=red>Warning:</font>
+Do not use for commercial purposes.
+endheader
+
+participant SubView as SV
+participant View as V
+participant ViewRootImpl as VRI
+participant Choreographer as Ch
+participant DisplayEventReceiver.java as DER
+participant android_view_DisplayEventReceiver.cpp as avD
+participant DisplayEventDispatcher.cpp as DED
+participant DisplayEventReceiver.cpp as DERc
+participant EventThreadConnection as ETC
+participant EventThread as ET
+participant DispSyncSource as DSS
+participant DispSync as DS
+
+===Choreographer初始化==
+'Choreographer初始化
+VRI -> Ch : getInstence
+activate Ch
+Ch -> Ch : ThreadLocal sThreadInstance
+note over Ch
+这里Choreographer的初始化是ThreadLocal
+方式的，每一个Thread都会拥有一个
+Choreographer对象引用，但是又是
+单例模式，所以每个Thread只能拥有一个引用
+end note
+Ch -> Ch : Choreographer(\nVSYNC_SOURCE_APP)
+activate Ch
+note over Ch
+VSYNC_SOURCE_APP是Vsync source，
+参考ISurfaceComposer.h
+目前有两种，分别是app和sf
+end note
+Ch --> DER : new FrameDisplayEventReceiver(\nvsyncSource)
+deactivate Ch
+deactivate Ch
+activate DER
+DER -> avD : nativeInit
+activate avD
+avD -> avD : new NativeDisplayEventReceiver
+activate avD
+avD -> DED : DisplayEventDispatcher
+deactivate avD
+activate DED
+DED -> DERc : mReceiver(vsyncSource)
+deactivate DED
+activate DERc
+'
+'note over Ch
+'层层调用，初始化DisplayEventReceiver
+'end note
+DERc --> ETC : createDisplayEventConnection(\nvsyncSource)
+deactivate DERc
+activate ETC
+note over DERc
+创建连接到EventThread的Connection
+end note
+ETC --> avD
+avD --> DED : initialize
+deactivate ETC
+'初始化DisplayEventDispatcher，创建监听VSync信号的looper
+activate DED
+DED -> DERc : getFd
+activate DERc
+DERc -> DERc : mDataChannel->getFd
+DERc --> DED : Fd
+deactivate DERc
+DED -> DED : mLooper->addFd(fd)
+note over DED
+通过Looper监听mDataChannel对应的Fd
+end note
+DED --> avD
+deactivate DED
+avD --> DER: mReceiverPtr
+deactivate avD
+deactivate DER
+
+
+'初始化EventThread，循环处理信号请求和信号上报
+ET -> ET : EventThread
+activate ET
+note over ET
+SurfaceFlinger 会初始化 EventThread
+参见SurfaceFlinger初始化流程图
+end note
+ET -> ET : mVSyncSource:DispSyncSource
+ET -> DSS : setCallback(this)
+note over ET
+EventThread继承了VSyncSource::CallBack
+所以此处回调为EventThread::onVSyncEvent
+end note
+create control threadMain
+ET -> threadMain : <<start loop>>
+deactivate ET
+threadMain -> threadMain : threadMain
+activate threadMain
+threadMain -> threadMain : mCondition.wait
+
+'初始化DispSync
+DS -> DS : init
+note over DS
+参见SurfaceFlinger初始化流程图
+end note
+activate DS
+create control DispSyncThread
+DS -> DispSyncThread
+deactivate DS
+DispSyncThread -> DispSyncThread : threadLoop
+activate DispSyncThread
+DispSyncThread -> DispSyncThread : mCond.wait
+
+===request==
+V -> VRI : invalidate/requestLayout
+note over SV,V
+1.Any changes will trigger calling invalidate()
+ or requestLayout()
+2.Calling the functions directly.
+end note
+VRI -> VRI : scheduleTraversals
+note over VRI
+If  //<color #a138a8>mTraversalScheduled = true</color>// ,
+ discard this traversal.
+end note
+VRI -> Ch : postCallback
+note over VRI,Ch
+Set //<color #a138a8>mTraversalScheduled</color>//  to true,
+mark as scheduling.
+Callback  //<color #a138a8>mTraversalRunnable</color>//
+end note
+activate Ch
+'Choreographer -> Choreographer : postCallbackDelayed
+'activate Choreographer
+Ch -> Ch : postCallbackDelayedInternal
+activate Ch
+Ch -> Ch : addCallbackLocked
+Ch -> Ch : scheduleFrameLocked
+note over Ch
+set //<color #a138a8>mFrameScheduled</color>// true
+end note
+Ch -> Ch : scheduleVsyncLocked
+deactivate Ch
+Ch -> DER : scheduleVsync
+deactivate Ch
+note over Ch,DER
+注册监听vsync事件，每次有绘制需求，都需要
+注册监听一次vsync，监听完毕就会释放，所以
+没有界面刷新的情况下是不监听vsync的
+end note
+DER -> avD : nativeScheduleVsync
+avD -> DED : scheduleVsync
+DED -> DERc : requestNextVsync
+DERc -> ETC : requestNextVsync
+note over DERc,ETC
+EventThreadConnection使用了Binder，
+参考DisplayEventConnection类图
+end note
+ETC -> ET : requestNextVsync
+ET -> threadMain : mCondition.notify_all
+
+threadMain -> DSS : setVSyncEnabled
+DSS -> DS : addEventListener(callback)
+note over DSS,DS
+Enable monitor VSync
+DispSyncSource继承了DispSync::Callback
+所以此处callback为DispSyncSource::onDispSyncEvent
+end note
+DS -> DispSyncThread : addEventListener(callback)
+activate DispSyncThread
+DispSyncThread -> DispSyncThread : mCond.signal
+deactivate DispSyncThread
+
+==vsync trigger==
+
+DispSyncThread -> DS : fireCallbackInvocations
+deactivate DispSyncThread
+deactivate DS
+DS --> DSS : onDispSyncEvent
+DSS --> ET : onVSyncEvent
+activate ET
+ET -> ET : mPendingEvents.push(Vsync)
+ET -> threadMain : mCondition.notify_all
+deactivate ET
+
+threadMain -> threadMain : mPendingEvents.front
+threadMain -> ET : dispatchEvent(event)//分发Events给所有符合的注册的Connection//
+deactivate threadMain
+ET -> ETC : postEvent
+ETC -> DERc : sendEvents
+activate DERc
+note over DERc,ETC
+这里直接调用DisplayEventReceiver静态方法发送数据
+end note
+DERc -> DERc : <<write to mDataChannel>>
+DERc --> DED : <trigger>
+deactivate DERc
+DED -> DED : handleEvent
+DED -> avD : dispatchVsync
+avD -> DER : dispatchVsync
+DER -> Ch : onVsync
+
+activate Ch
+Ch -> Ch : run
+deactivate Ch
+Ch -> Ch : doFrame
+note over Ch
+ check //<color #a138a8>mFrameScheduled</color>//. if false, discard.
+ check vsync time
+end note
+Ch -> Ch : doCallbacks
+note over Ch
+Callbacks are performed in order
+INPUT > ANIMATION > TRAVERSAL
+end note
+Ch -> VRI : c.run
+note over VRI,Ch: callback  //<color #a138a8>mTraversalRunnable</color>//
+VRI -> VRI : TraversalRunnable.run
+VRI -> VRI : doTraversal
+note over VRI
+If  //<color #a138a8>mTraversalScheduled = false</color>// ,
+not scheduling, discard this traversal.
+else set //<color #a138a8>mTraversalScheduled = false</color>// ,
+mark as scheduled.
+end note
+VRI -> VRI : performTraversals
+activate VRI
+VRI -> VRI : performMeasure
+VRI -> V : measure
+V -> SV : onMeasure
+VRI -> VRI : performLayout
+VRI -> V : layout
+V -> SV : onLayout
+VRI -> VRI : performDraw
+VRI -> V : draw
+V -> SV : onDraw
+deactivate VRI
+legend left
+Choreographer在VSync和View绘制中的作用流程
+app通道针对EventThread事件监听
+流程总结：
+1. 应用通过invalidate或者requestLayout发起界面更新请求
+2. choreographer注册接听下一个VSync信号
+3. 接收到VSync信号，通知CPU去处理View的更新
+4. View执行measure、layout、draw来完成View的更新数据
+5. 通知GPU合适图层
+endlegend
+right footer Generated by Yaoguang
+@enduml

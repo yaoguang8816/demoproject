@@ -1,0 +1,51 @@
+@startuml
+
+'    left to right direction
+package "APP 进程" as AppProcess {
+    agent u as "App进程图形绘制完毕，调用queueBuffer"
+    agent v as "App进程通过invalidate或者
+    requestLayout发送图形绘制请求"
+    agent w as "App接收到VSync信号之后进入图形绘制流程"
+}
+
+app -left-> AppProcess
+
+package "EventThread线程, app" as app {
+    agent a as "
+    1.App进程通过invalidate或者
+    2.
+    3.
+    4."
+}
+
+package "EventThread线程, sf" as sf {
+    agent b as "
+    1.App进程通过invalidate或者
+    2.
+    3.
+    4."
+}
+
+package "SurfaceFlinger 进程" as SFProcess {
+    agent x as "App进程图形绘制完毕，调用queueBuffer"
+    agent y as "App进程通过invalidate或者
+    requestLayout发送图形绘制请求"
+}
+rectangle "DispSyncThread" as DST {
+    agent d as "
+    1.a;kdsfja;kdsfj;adkjf;adfsjkasd;fkjad;fkjads;fkjad
+    2.
+    3.
+    4."
+}
+'u -left-> SFProcess
+v -left-> app
+app -right-> w
+x -right-> sf
+sf -left-> y
+
+sf-down-> DST
+DST-up->sf
+app -down-> DST
+DST -up-> app
+@enduml
