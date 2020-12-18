@@ -5,6 +5,9 @@ import android.os.Bundle;
 import android.util.Log;
 import android.widget.Toast;
 
+import com.yg.demoproject.algorithmquestion.AlgorithmQuestionActivity;
+import com.yg.demoproject.android.AndroidDemoActivity;
+import com.yg.demoproject.java.JavaActivity;
 import com.yg.demoproject.view.MainItemTouchHelperCallback;
 import com.yg.demoproject.view.MainViewAdapter;
 import com.yg.demoproject.view.MainViewItem;
@@ -50,18 +53,13 @@ public class MainActivity extends AppCompatActivity implements MainViewAdapter.O
 
     void initDataList() {
         int test = 0;
-        mList.add(new MainViewItem("文件读写", "", MainViewItem.TARGET_FILE));
-        mList.add(new MainViewItem("test" + test++, "test content ", MainViewItem.TARGET_BINDER_TEST));
-        mList.add(new MainViewItem("test" + test++, "test content "));
-        mList.add(new MainViewItem("test" + test++, "test content "));
-        mList.add(new MainViewItem("test" + test++, "test content "));
-        mList.add(new MainViewItem("test" + test++, "test content "));
-        mList.add(new MainViewItem("test" + test++, "test content "));
-        mList.add(new MainViewItem("test" + test++, "test content "));
-        mList.add(new MainViewItem("test" + test++, "test content "));
-        mList.add(new MainViewItem("test" + test++, "test content "));
-        mList.add(new MainViewItem("test" + test++, "test content "));
-        mList.add(new MainViewItem("test" + test++, "test content "));
+        mList.add(new MainViewItem("文件操作", "", new Intent(this, FileRWActivity.class)));
+        mList.add(new MainViewItem("Android组件Demo", "test content ", new Intent(this, AndroidDemoActivity.class)));
+        mList.add(new MainViewItem("Binder相关", "test content "));
+        mList.add(new MainViewItem("算法介绍", "test content "));
+        mList.add(new MainViewItem("算法题", "算法刷题", new Intent(this, AlgorithmQuestionActivity.class)));
+        mList.add(new MainViewItem("Java知识", "", new Intent(this, JavaActivity.class)));
+        mList.add(new MainViewItem("编程题目", "test content "));
         mList.add(new MainViewItem("test" + test++, "test content "));
         mList.add(new MainViewItem("test" + test++, "test content "));
         mList.add(new MainViewItem("test" + test++, "test content "));
@@ -186,16 +184,10 @@ public class MainActivity extends AppCompatActivity implements MainViewAdapter.O
 
     @Override
     public void onItemClick(MainViewItem item) {
-        switch (item.getTarget()) {
-            case MainViewItem.TARGET_FILE:
-                startActivity(new Intent(this, FileRWActivity.class));
-                break;
-            case MainViewItem.TARGET_BINDER_TEST:
-                startActivity(new Intent(this, WhiteFullscreenActivity.class));
-                break;
-            default:
-                Toast.makeText(this, "Clicked " + item.getTitle() + "!!! contents is:" + item.getContents(), Toast.LENGTH_SHORT).show();
-                break;
+        if (item.getTarget() != null) {
+            startActivity(item.getTarget());
+        } else {
+            Toast.makeText(this, "Clicked " + item.getTitle() + ", contents is:" + item.getContents(), Toast.LENGTH_SHORT).show();
         }
     }
 }

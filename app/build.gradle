@@ -1,10 +1,26 @@
 apply plugin: 'com.android.application'
 
 android {
+    //app 签名, 方法参考https://blog.csdn.net/donkor_/article/details/53487133
+    signingConfigs {
+        config {
+            keyAlias 'key0'
+            keyPassword 'yg2018'
+            storeFile file('/home/mi/Documents/selfNote/yaoguang.jks')
+            storePassword 'yg2018'
+        }
+        config_release {
+            keyAlias 'key01'
+            keyPassword 'yg2018'
+            storeFile file('/home/mi/Documents/selfNote/yaoguang.jks')
+            storePassword 'yg2018'
+        }
+    }
+
     compileSdkVersion 28
     buildToolsVersion "29.0.2"
     defaultConfig {
-        applicationId "com.mi.powertest"
+        applicationId "com.yg.demoproject"
         minSdkVersion 27
         targetSdkVersion 28
         versionCode 1
@@ -12,9 +28,31 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
+//        release {
+//            minifyEnabled false
+//            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+//        }
+        def BOOLEAN = "boolean"
+        def TRUE = "true"
+        def FALSE = "false"
+        def IS_DEBUG = "isDebug"
+        def IS_RELEASE = "isRelease"
+
+        debug {
+            applicationIdSuffix ".debug"
+            signingConfig signingConfigs.config
+            debuggable true
+            buildConfigField BOOLEAN, IS_DEBUG, TRUE
+            buildConfigField BOOLEAN, IS_RELEASE, FALSE
+//            ext.enableCrashlytics = false //开发版关闭该功能可以加快构建速度
+        }
+
         release {
+            signingConfig signingConfigs.config_release
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            buildConfigField BOOLEAN, IS_DEBUG, FALSE
+            buildConfigField BOOLEAN, IS_RELEASE, TRUE
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
 }
@@ -28,4 +66,5 @@ dependencies {
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.1.1'
+    debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.3'
 }

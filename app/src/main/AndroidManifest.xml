@@ -12,16 +12,27 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+        <activity android:name=".algorithmquestion.BaseQuestionActivity"></activity>
+        <activity android:name=".algorithmquestion.AlgorithmQuestionActivity" />
+        <activity android:name=".android.AndroidDemoActivity" />
         <activity
-            android:name="com.yg.demoproject.FileRWActivity"
+            android:name=".android.DispatchActivity"
+            android:label="@string/title_activity_dispatch"
+            android:theme="@style/AppTheme.NoActionBar" />
+        <activity android:name=".java.polymorphism.PolymorphismActivity" />
+        <activity android:name=".java.comparator.ComparatorActivity" />
+        <activity android:name=".java.runtime.RuntimeActivity" />
+        <activity android:name=".java.JavaActivity" />
+        <activity
+            android:name=".FileRWActivity"
             android:label="@string/title_activity_file_rw"
-            android:theme="@style/AppTheme.NoActionBar"></activity>
+            android:theme="@style/AppTheme.NoActionBar" />
         <activity
-            android:name="com.yg.demoproject.WhiteFullscreenActivity"
+            android:name=".WhiteFullscreenActivity"
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:label="@string/title_activity_white_fullscreen"
             android:theme="@style/FullscreenTheme" />
-        <activity android:name="com.yg.demoproject.MainActivity">
+        <activity android:name=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

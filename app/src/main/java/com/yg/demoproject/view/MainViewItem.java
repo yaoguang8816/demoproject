@@ -1,29 +1,44 @@
 package com.yg.demoproject.view;
 
-public class MainViewItem {
-    public static final int TARGET_FILE = 0;
-    public static final int TARGET_BINDER_TEST = 1;
+import android.content.Intent;
+import android.os.Bundle;
 
+public class MainViewItem {
     String title;
     String contents;
-    int target;
+    Intent targetIntent;
+    int id = -1;
+    Bundle bundle;
 
-    public MainViewItem(String title, String contents, int target) {
-        this.target = target;
+    public MainViewItem(String title, String contents, Intent target) {
+        this.targetIntent = target;
         this.title = title;
         this.contents = contents;
     }
 
     public MainViewItem(String title, String contents) {
-        this(title, contents, -1);
+        this.title = title;
+        this.contents = contents;
+    }
+
+    public MainViewItem(String title, String contents, int id) {
+        this.id = id;
+        this.title = title;
+        this.contents = contents;
+    }
+
+    public MainViewItem(String title, String contents, Bundle bundle) {
+        this.bundle = bundle;
+        this.title = title;
+        this.contents = contents;
     }
 
     public MainViewItem(String title) {
         this(title, "");
     }
 
-    public int getTarget() {
-        return target;
+    public Intent getTarget() {
+        return targetIntent;
     }
 
     public String getContents() {
@@ -34,7 +49,11 @@ public class MainViewItem {
         return title;
     }
 
-    public interface BaseItem {
-        MainViewItem createItem();
+    public int getId() {
+        return id;
+    }
+
+    public Bundle getBundle() {
+        return bundle;
     }
 }
